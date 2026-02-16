@@ -23,7 +23,6 @@ def create_template():
 # --- 3. هدر اصلی برنامه ---
 st.markdown("""
     <h1 style='text-align: center; color: #4A90E2;'>🚀 Data Analysis Assistant</h1>
-    <p style='text-align: center; color: #888;'>تحلیل هوشمند داده‌های فروش با قدرت هوش مصنوعی</p>
 """, unsafe_allow_html=True)
 
 # --- 4. تنظیمات سایدبار ---
@@ -160,3 +159,4 @@ footer_html = f"""
 </div>
 """
 st.markdown(footer_html, unsafe_allow_html=True)
+
