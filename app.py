@@ -169,7 +169,6 @@ st.set_page_config(page_title="Data Analysis Assistant", page_icon="📈", layou
 
 st.markdown("""
     <h1 style='text-align: center; color: #4A90E2;'>🚀 Data Analysis Assistant</h1>
-    <hr>
 """, unsafe_allow_html=True)
 
 # --- کد مربوط به تب‌ها و تحلیل‌ها که قبلاً داشتی اینجا قرار می‌گیرد ---
@@ -186,6 +185,7 @@ footer_html = f"""
 </div>
 """
 st.markdown(footer_html, unsafe_allow_html=True)
+
 
 
 
