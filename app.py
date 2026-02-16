@@ -10,8 +10,8 @@ from langchain_groq import ChatGroq
 st.set_page_config(page_title="Smart Data Analysis", page_icon="📈", layout="wide")
 
 st.markdown("""
-    <h1 style='text-align: center; color: #4A90E2;'>🚀 هوش مصنوعی تحلیل فروش</h1>
-    <p style='text-align: center; color: #888;'>فایل اکسل خود را آپلود کنید و تحلیل‌های پیشرفته بگیرید</p>
+    <h1 style='text-align: center; color: #4A90E2;'>🚀Smart Data Analysis</h1>
+    <p style='text-align: center; color: #888;'>Upload your excel file from the side bar</p>
     <hr>
 """, unsafe_allow_html=True)
 
@@ -22,7 +22,7 @@ st.markdown("<br><br><br>", unsafe_allow_html=True)
 st.markdown("---")
 footer_html = f"""
 <div style="text-align: center;">
-    <p style="margin-bottom: 10px;">👨‍💻 Developed By <b>اHassan Moosavi</b></p>
+    <p style="margin-bottom: 10px;">👨‍💻 Developed By <b>Hassan Moosavi</b></p>
     <a href="https://wa.me/31685529172" target="_blank"><img src="https://img.shields.io/badge/WhatsApp-25D366?style=for-the-badge&logo=whatsapp&logoColor=white" style="margin:5px;"></a>
     <a href="http://linkedin.com/in/hassan-moosavi" target="_blank"><img src="https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white" style="margin:5px;"></a>
     <a href="mailto:s.h.mousaviy@gmail.com"><img src="https://img.shields.io/badge/Email-D14836?style=for-the-badge&logo=gmail&logoColor=white" style="margin:5px;"></a>
@@ -190,4 +190,5 @@ if data_file:
                 st.error(f"Connection Error: {e}")
 else:
     st.info("Waiting for Sales Data to be uploaded...")
+
 
