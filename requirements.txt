@@ -1,7 +1,8 @@
 pandas
-streamlit
+streamlit>=1.35.0
 plotly
 langchain-groq
 langchain-experimental
 openpyxl
 xlsxwriter
+altair<5
