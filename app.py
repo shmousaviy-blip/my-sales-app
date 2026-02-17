@@ -210,7 +210,7 @@ else:
     st.markdown("""
         <div style='text-align: center; padding: 5rem; border: 2px dashed #ccc; border-radius: 20px; color: #888;'>
             <img src='https://cdn-icons-png.flaticon.com/512/4090/4090458.png' width='100' style='opacity: 0.5; margin-bottom: 1rem;'>
-            <h3>Waiting for Sales Data to be uploaded from the sidebar...</h3>
+            <h3>Waiting for Data to be uploaded from the sidebar...</h3>
             <p>Please upload your Excel file from the left menu to begin the analysis.</p>
         </div>
     """, unsafe_allow_html=True)
