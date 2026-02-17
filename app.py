@@ -21,6 +21,14 @@ def create_template():
     return buffer
 
 
+# تابع کمکی برای دانلود اکسل
+def to_excel(df):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='Forecast_Results')
+    return output.getvalue()
+
+
 # --- 3. هدر اصلی برنامه ---
 st.markdown("""
     <div style='text-align: center; padding: 1rem; background-color: #f0f2f6; border-radius: 10px; margin-bottom: 2rem;'>
@@ -48,7 +56,7 @@ if needs_rename:
                                file_name="Config_Template.xlsx")
     config_file = st.sidebar.file_uploader("Choose the Titles File", type="xlsx")
 
-# تعریف Footer برای جلوگیری از خطای NameError در انتهای کد
+# تعریف Footer
 footer_html = f"""
 <div style="text-align: center;">
     <p style="margin-bottom: 10px; font-size: 0.9rem; color: #555;">Developed by <b>Hassan Moosavi</b></p>
@@ -77,7 +85,8 @@ if data_file:
 
     with tab_stats:
         st.subheader("📊 Overview Of Data")
-        st.dataframe(df.describe().T.style.format("{:,.0f}"), use_container_width=True)
+        # نمایش Describe با مدیریت خطای فرمت (برای تاریخ شمسی)
+        st.dataframe(df.describe(include=[np.number]).T.style.format("{:,.0f}"), use_container_width=True)
 
         st.divider()
         st.subheader("🔮 Aggregated Forecasting (Sum of Value per Time)")
@@ -85,47 +94,60 @@ if data_file:
         cols = df.columns.tolist()
         numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
 
-        c_select1, c_select2 = st.columns(2)
+        c_select1, c_select2, c_select3 = st.columns(3)
         time_col = c_select1.selectbox("📅 Select Time/Date Column:", ["-- Choose --"] + cols)
         value_col = c_select2.selectbox("💰 Select Value Column to Predict:", ["-- Choose --"] + numeric_cols)
+        period_type = c_select3.selectbox("⏱️ Forecast Basis:", ["Daily", "Monthly"])
 
         if time_col != "-- Choose --" and value_col != "-- Choose --":
             try:
-                # --- اصلاح اصلی: تجمیع داده‌ها (Aggregation) ---
-                # داده‌ها بر اساس زمان گروه‌بندی شده و مقادیر با هم جمع می‌شوند
-                agg_df = df.groupby(time_col)[value_col].sum().reset_index()
-                agg_df = agg_df.sort_values(by=time_col)
+                temp_df = df.dropna(subset=[time_col, value_col]).copy()
 
-                # آماده‌سازی برای مدل
+                # منطق تجمیع ماهانه یا روزانه
+                if period_type == "Monthly":
+                    temp_df['Grouping_Time'] = temp_df[time_col].astype(str).str[:7]
+                else:
+                    temp_df['Grouping_Time'] = temp_df[time_col].astype(str)
+
+                agg_df = temp_df.groupby('Grouping_Time')[value_col].sum().reset_index()
+                agg_df = agg_df.sort_values(by='Grouping_Time')
+
                 y = agg_df[value_col].values.reshape(-1, 1)
                 X = np.arange(len(y)).reshape(-1, 1)
 
                 if len(y) > 2:
-                    future_steps = st.slider("Forecast periods into future:", 1, 30, 5)
+                    future_steps = st.slider(f"Forecast {period_type} periods into future:", 1, 30, 5)
                     model = LinearRegression().fit(X, y)
                     X_future = np.arange(len(y), len(y) + future_steps).reshape(-1, 1)
                     y_pred = model.predict(X_future)
 
-                    st.info(f"💡 Analysis performed on the **Total Sum** of `{value_col}` per each `{time_col}`.")
+                    st.info(f"💡 Analysis performed on the **Total Sum** of `{value_col}` per each `{period_type}`.")
 
                     st.write(f"**Predicted Total {value_col}:**")
                     pred_results = pd.DataFrame({
                         'Period': [f"Future +{i + 1}" for i in range(future_steps)],
                         'Predicted Total': y_pred.flatten()
                     })
-                    st.dataframe(pred_results.style.format("{:,.2f}"), use_container_width=True)
+                    # فرمت‌بندی فقط روی ستون عدد برای جلوگیری از خطای تاریخ شمسی
+                    st.dataframe(pred_results.style.format(subset=['Predicted Total'], formatter="{:,.2f}"),
+                                 use_container_width=True)
+
+                    # دکمه دانلود اکسل (جدید)
+                    st.download_button(label="📥 Download Forecast Report", data=to_excel(pred_results),
+                                       file_name="Forecast_Report.xlsx")
 
                     # رسم نمودار تجمیعی
-                    history_df = pd.DataFrame(
-                        {'Time': agg_df[time_col].astype(str), 'Value': agg_df[value_col], 'Type': 'Actual Total'})
+                    history_df = pd.DataFrame({'Time': agg_df['Grouping_Time'].astype(str), 'Value': agg_df[value_col],
+                                               'Type': 'Actual Total'})
                     future_df = pd.DataFrame(
                         {'Time': [f"Next {i + 1}" for i in range(future_steps)], 'Value': y_pred.flatten(),
                          'Type': 'Forecast'})
 
                     fig_forecast = px.line(pd.concat([history_df, future_df]), x='Time', y='Value', color='Type',
-                                           title=f"Trend of Total {value_col} per {time_col}",
+                                           title=f"Trend of Total {value_col} per {period_type}",
                                            markers=True,
                                            color_discrete_map={'Actual Total': '#4A90E2', 'Forecast': '#2ECC71'})
+                    fig_forecast.update_layout(yaxis_tickformat=',.0f', template="plotly_white")
                     st.plotly_chart(fig_forecast, use_container_width=True)
                 else:
                     st.info("ℹ️ Not enough unique periods after aggregation for forecasting.")
@@ -180,18 +202,19 @@ if data_file:
         else:
             try:
                 llm = ChatGroq(temperature=0, model_name="llama-3.1-8b-instant", api_key=groq_api_key)
+                # اضافه شدن قابلیت اجرای کد برای رسم نمودار در چت‌بات
                 agent = create_pandas_dataframe_agent(llm, df, verbose=True, allow_dangerous_code=True,
                                                       handle_parsing_errors=True)
                 if "messages" not in st.session_state: st.session_state.messages = []
                 for msg in st.session_state.messages:
                     with st.chat_message(msg["role"]): st.write(msg["content"])
-                if prompt := st.chat_input("Ask about your data..."):
+                if prompt := st.chat_input("Ask about your data or ask to draw a chart..."):
                     st.session_state.messages.append({"role": "user", "content": prompt})
                     with st.chat_message("user"): st.write(prompt)
                     with st.chat_message("assistant"):
                         with st.spinner("🤖 Analyzing..."):
                             response = agent.invoke(
-                                {"input": f"Data columns: {list(df.columns)}. Task: {prompt}. Answer in Persian."})
+                                {"input": f"Answer in Persian. If asked for a chart, draw it. Task: {prompt}"})
                             final_answer = response.get("output", str(response)) if isinstance(response,
                                                                                                dict) else response
                             st.write(final_answer)
