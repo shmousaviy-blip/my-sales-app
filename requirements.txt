@@ -7,4 +7,6 @@ openpyxl
 xlsxwriter
 altair<5
 LinearRegression
+sklearn
+
 
