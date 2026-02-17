@@ -3,12 +3,27 @@ import streamlit as st
 import io
 import plotly.express as px
 import numpy as np
+from datetime import datetime
 from sklearn.linear_model import LinearRegression
 from langchain_experimental.agents import create_pandas_dataframe_agent
 from langchain_groq import ChatGroq
 
 # --- 1. تنظیمات اولیه صفحه ---
 st.set_page_config(page_title="Data Analysis Assistant", page_icon="📈", layout="wide")
+
+# تابع ثبت لاگ (Logs)
+def log_activity(activity_details):
+    try:
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with open("activity_log.txt", "a", encoding="utf-8") as f:
+            f.write(f"[{current_time}] {activity_details}\n")
+    except:
+        pass
+
+# ثبت ورود کاربر
+if 'logged_visit' not in st.session_state:
+    log_activity("New User Connected")
+    st.session_state.logged_visit = True
 
 
 # --- 2. توابع کمکی ---
@@ -19,7 +34,6 @@ def create_template():
     with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
         template_df.to_excel(writer, index=False, sheet_name='Sheet1')
     return buffer
-
 
 def to_excel(df):
     output = io.BytesIO()
@@ -55,6 +69,18 @@ if needs_rename:
                                file_name="Config_Template.xlsx")
     config_file = st.sidebar.file_uploader("Choose the titles file", type="xlsx")
 
+# --- بخش مدیریت مخفی (Admin Panel) ---
+st.sidebar.divider()
+with st.sidebar.expander("🔐 Admin Access"):
+    admin_pass = st.text_input("Password", type="password")
+    if admin_pass == "hassan123": # پسورد دلخواه شما
+        try:
+            with open("activity_log.txt", "r", encoding="utf-8") as f:
+                logs = f.readlines()
+            st.text_area("Activity Logs", value="".join(logs[-20:]), height=200) # نمایش ۲۰ فعالیت آخر
+        except FileNotFoundError:
+            st.write("No logs recorded yet.")
+
 # تعریف Footer
 footer_html = f"""
 <div style="text-align: center;">
@@ -70,6 +96,11 @@ footer_html = f"""
 # --- 5. منطق اصلی برنامه ---
 if data_file:
     df = pd.read_excel(data_file)
+    
+    # ثبت نام فایل آپلود شده در لاگ
+    if 'logged_file' not in st.session_state or st.session_state.logged_file != data_file.name:
+        log_activity(f"Uploaded File: {data_file.name}")
+        st.session_state.logged_file = data_file.name
 
     if needs_rename and config_file:
         config_df = pd.read_excel(config_file).dropna()
@@ -195,7 +226,6 @@ if data_file:
         else:
             try:
                 llm = ChatGroq(temperature=0, model_name="llama-3.1-8b-instant", api_key=groq_api_key)
-                # allow_dangerous_code set to True for data processing speed, but UI chart logic removed.
                 agent = create_pandas_dataframe_agent(llm, df, verbose=False, allow_dangerous_code=True,
                                                       handle_parsing_errors=True)
 
@@ -209,10 +239,8 @@ if data_file:
 
                     with st.chat_message("assistant"):
                         with st.spinner("🤖 Thinking..."):
-                            # Logic: No Persian responses, strictly English. No plotting instructions.
                             response = agent.invoke({"input": f"Respond strictly in English. Question: {prompt}"})
-                            final_answer = response.get("output", str(response)) if isinstance(response,
-                                                                                               dict) else response
+                            final_answer = response.get("output", str(response)) if isinstance(response, dict) else response
                             st.write(final_answer)
                             st.session_state.messages.append({"role": "assistant", "content": final_answer})
             except Exception as e:
