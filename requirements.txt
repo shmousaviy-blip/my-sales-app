@@ -6,7 +6,5 @@ langchain-experimental
 openpyxl
 xlsxwriter
 altair<5
-LinearRegression
-sklearn
-
-
+scikit-learn
+numpy
