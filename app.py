@@ -20,7 +20,7 @@ def log_activity(activity_details):
     except:
         pass
 
-# ثبت ورود کاربر
+# ثبت ورود کاربر (فقط یکبار در هر Session)
 if 'logged_visit' not in st.session_state:
     log_activity("New User Connected")
     st.session_state.logged_visit = True
@@ -69,17 +69,24 @@ if needs_rename:
                                file_name="Config_Template.xlsx")
     config_file = st.sidebar.file_uploader("Choose the titles file", type="xlsx")
 
-# --- بخش مدیریت مخفی (Admin Panel) ---
+# --- بخش مدیریت مخفی (Admin Panel) اصلاح شده ---
 st.sidebar.divider()
 with st.sidebar.expander("🔐 Admin Access"):
     admin_pass = st.text_input("Password", type="password")
-    if admin_pass == "hassan123": # پسورد دلخواه شما
+    if admin_pass == "hassan123":
         try:
             with open("activity_log.txt", "r", encoding="utf-8") as f:
-                logs = f.readlines()
-            st.text_area("Activity Logs", value="".join(logs[-20:]), height=200) # نمایش ۲۰ فعالیت آخر
+                logs_content = f.read()
+            
+            if logs_content.strip():
+                st.text_area("Activity Logs", value=logs_content, height=300)
+                st.download_button("📥 Download Log File", data=logs_content, file_name="activity_log.txt")
+            else:
+                st.info("Log file is empty. No activity yet.")
         except FileNotFoundError:
-            st.write("No logs recorded yet.")
+            st.warning("No logs found. Waiting for first activity...")
+    elif admin_pass != "":
+        st.error("Incorrect Password")
 
 # تعریف Footer
 footer_html = f"""
@@ -98,9 +105,9 @@ if data_file:
     df = pd.read_excel(data_file)
     
     # ثبت نام فایل آپلود شده در لاگ
-    if 'logged_file' not in st.session_state or st.session_state.logged_file != data_file.name:
+    if 'last_uploaded_file' not in st.session_state or st.session_state.last_uploaded_file != data_file.name:
         log_activity(f"Uploaded File: {data_file.name}")
-        st.session_state.logged_file = data_file.name
+        st.session_state.last_uploaded_file = data_file.name
 
     if needs_rename and config_file:
         config_df = pd.read_excel(config_file).dropna()
