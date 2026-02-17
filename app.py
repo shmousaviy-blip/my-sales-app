@@ -5,8 +5,9 @@ import plotly.express as px
 from langchain_experimental.agents import create_pandas_dataframe_agent
 from langchain_groq import ChatGroq
 
-# --- 1. تنظیمات اولیه صفحه (باید اولین دستور باشد) ---
+# --- 1. تنظیمات اولیه صفحه ---
 st.set_page_config(page_title="Data Analysis Assistant", page_icon="📈", layout="wide")
+
 
 # --- 2. توابع کمکی ---
 def create_template():
@@ -20,22 +21,28 @@ def create_template():
         template_df.to_excel(writer, index=False, sheet_name='Sheet1')
     return buffer
 
+
 # --- 3. هدر اصلی برنامه ---
 st.markdown("""
     <h1 style='text-align: center; color: #4A90E2;'>🚀 Data Analysis Assistant</h1>
 """, unsafe_allow_html=True)
 
-# --- 4. تنظیمات سایدبار ---
-st.sidebar.subheader("AI Settings")
+# --- 4. تنظیمات سایدبار (با تفکیک بصری جذاب) ---
+st.sidebar.title("🛠️ Control Panel")
+st.sidebar.divider()
+
+st.sidebar.subheader("🔑 AI Settings")
 groq_api_key = st.sidebar.text_input("Enter Groq API Key:",
                                      value="",
                                      type="password",
                                      placeholder="gsk_...")
+st.sidebar.divider()
 
-st.sidebar.subheader("Input Data")
+st.sidebar.subheader("📂 Input Data")
 data_file = st.sidebar.file_uploader("Choose a Sales Data", type="xlsx")
+st.sidebar.divider()
 
-st.sidebar.subheader("Config The Titles Of Data")
+st.sidebar.subheader("📝 Config The Titles Of Data")
 needs_rename = st.sidebar.checkbox("Do you Need to Change the Data Titles?")
 
 config_file = None
@@ -47,6 +54,7 @@ if needs_rename:
         file_name="Config_Template.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     config_file = st.sidebar.file_uploader("Choose the Titles File", type="xlsx")
+st.sidebar.divider()
 
 # --- 5. منطق اصلی برنامه ---
 if data_file:
@@ -71,13 +79,26 @@ if data_file:
         styled_desc = desc_df.style.format("{:,.0f}").set_properties(**{'text-align': 'right', 'padding': '10px'})
         st.dataframe(styled_desc, use_container_width=True)
 
-    # --- TAB 2: ANALYTICS ---
+    # --- TAB 2: ANALYTICS (با فیلتر داینامیک) ---
     with tab_charts:
         st.subheader("📈 Analytics Report Settings")
-        chart_type = st.radio("Choose Chart Type:", ["Line Chart", "Bar Chart", "Pie Chart", "Treemap"], horizontal=True)
+
+        # بخش فیلتر داینامیک
+        with st.expander("🔍 Filter Data (Optional)"):
+            col_f1, col_f2 = st.columns(2)
+            filter_col = col_f1.selectbox("Filter by column:", ["None"] + df.columns.tolist())
+            if filter_col != "None":
+                unique_vals = df[filter_col].unique().tolist()
+                selected_vals = col_f2.multiselect(f"Select values for {filter_col}:", unique_vals, default=unique_vals)
+                filtered_df = df[df[filter_col].isin(selected_vals)]
+            else:
+                filtered_df = df
+
+        chart_type = st.radio("Choose Chart Type:", ["Line Chart", "Bar Chart", "Pie Chart", "Treemap"],
+                              horizontal=True)
 
         with st.form("main_chart_form"):
-            columns = df.columns.tolist()
+            columns = filtered_df.columns.tolist()
             if chart_type == "Treemap":
                 c1, c2, c3 = st.columns(3)
                 parent_level = c1.selectbox("Parent Category:", columns)
@@ -87,25 +108,27 @@ if data_file:
                 c1, c2 = st.columns(2)
                 x_axis = c1.selectbox("Select X axis:", columns)
                 y_axis = c2.selectbox("Select Y axis:", columns)
-            
+
             run_button = st.form_submit_button("🚀 Run Analysis")
 
         if run_button:
             try:
                 if chart_type == "Treemap":
-                    chart_data = df.groupby([parent_level, child_level])[y_axis].sum().reset_index()
-                    fig = px.treemap(chart_data, path=[parent_level, child_level], values=y_axis, color=y_axis, color_continuous_scale='RdBu')
+                    chart_data = filtered_df.groupby([parent_level, child_level])[y_axis].sum().reset_index()
+                    fig = px.treemap(chart_data, path=[parent_level, child_level], values=y_axis, color=y_axis,
+                                     color_continuous_scale='RdBu')
                 else:
-                    chart_data = df.groupby(x_axis)[y_axis].sum().reset_index()
+                    chart_data = filtered_df.groupby(x_axis)[y_axis].sum().reset_index()
                     if chart_type == "Pie Chart":
                         fig = px.pie(chart_data, names=x_axis, values=y_axis, hole=0.3)
                     elif chart_type == "Line Chart":
                         fig = px.line(chart_data, x=x_axis, y=y_axis, markers=True)
                     elif chart_type == "Bar Chart":
                         fig = px.bar(chart_data, x=x_axis, y=y_axis, color=y_axis)
-                
+
                 fig.update_layout(yaxis_tickformat=',.0f')
                 st.plotly_chart(fig, use_container_width=True)
+                st.success(f"Showing results for {len(filtered_df)} rows.")
             except Exception as e:
                 st.error(f"Error: {e}")
 
@@ -121,7 +144,8 @@ if data_file:
         else:
             try:
                 llm = ChatGroq(temperature=0, model_name="llama-3.1-8b-instant", api_key=groq_api_key)
-                agent = create_pandas_dataframe_agent(llm, df, verbose=True, allow_dangerous_code=True, handle_parsing_errors=True)
+                agent = create_pandas_dataframe_agent(llm, df, verbose=True, allow_dangerous_code=True,
+                                                      handle_parsing_errors=True)
 
                 if "messages" not in st.session_state:
                     st.session_state.messages = []
@@ -139,7 +163,8 @@ if data_file:
                         with st.spinner("🤖 Analyzing..."):
                             full_prompt = f"Data columns: {list(df.columns)}. Task: {prompt}. Answer in Persian."
                             response = agent.invoke({"input": full_prompt})
-                            final_answer = response.get("output", str(response)) if isinstance(response, dict) else response
+                            final_answer = response.get("output", str(response)) if isinstance(response,
+                                                                                               dict) else response
                             st.write(final_answer)
                             st.session_state.messages.append({"role": "assistant", "content": final_answer})
             except Exception as e:
@@ -147,16 +172,17 @@ if data_file:
 else:
     st.info("Waiting for Sales Data to be uploaded from the sidebar...")
 
-# --- 6. فوتر دائمی (خارج از بلاک IF برای نمایش همیشگی) ---
-st.markdown("<br><br><br>", unsafe_allow_html=True)
-st.markdown("---")
+# --- 6. فوتر دائمی (زیباتر و کوچک‌تر) ---
+st.markdown("<br><br>", unsafe_allow_html=True)
+st.divider()
 footer_html = f"""
 <div style="text-align: center;">
-    <p style="margin-bottom: 10px;">👨‍💻 Developed By <b>Hassan Moosavi</b></p>
-    <a href="https://wa.me/31685529172" target="_blank"><img src="https://img.shields.io/badge/WhatsApp-25D366?style=for-the-badge&logo=whatsapp&logoColor=white" style="margin:5px;"></a>
-    <a href="http://linkedin.com/in/hassan-moosavi" target="_blank"><img src="https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white" style="margin:5px;"></a>
-    <a href="mailto:s.h.mousaviy@gmail.com"><img src="https://img.shields.io/badge/Email-D14836?style=for-the-badge&logo=gmail&logoColor=white" style="margin:5px;"></a>
+    <p style="margin-bottom: 8px; font-size: 14px; color: #555;">Developed By <b>Hassan Moosavi</b></p>
+    <div style="display: flex; justify-content: center; gap: 10px;">
+        <a href="https://wa.me/31685529172" target="_blank"><img src="https://img.shields.io/badge/-WhatsApp-25D366?style=flat-square&logo=whatsapp&logoColor=white" height="20"></a>
+        <a href="http://linkedin.com/in/hassan-moosavi" target="_blank"><img src="https://img.shields.io/badge/-LinkedIn-0077B5?style=flat-square&logo=linkedin&logoColor=white" height="20"></a>
+        <a href="mailto:s.h.mousaviy@gmail.com"><img src="https://img.shields.io/badge/-Email-D14836?style=flat-square&logo=gmail&logoColor=white" height="20"></a>
+    </div>
 </div>
 """
 st.markdown(footer_html, unsafe_allow_html=True)
-
