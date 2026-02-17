@@ -5,7 +5,7 @@ import plotly.express as px
 from langchain_experimental.agents import create_pandas_dataframe_agent
 from langchain_groq import ChatGroq
 
-# --- 1. تنظیمات اولیه صفحه ---
+# --- 1. تنظیمات اولیه صفحه (باید اولین دستور باشد) ---
 st.set_page_config(page_title="Data Analysis Assistant", page_icon="📈", layout="wide")
 
 
@@ -24,10 +24,13 @@ def create_template():
 
 # --- 3. هدر اصلی برنامه ---
 st.markdown("""
-    <h1 style='text-align: center; color: #4A90E2;'>🚀 Data Analysis Assistant</h1>
+    <div style='text-align: center; padding: 1rem; background-color: #f0f2f6; border-radius: 10px; margin-bottom: 2rem;'>
+        <h1 style='color: #4A90E2; margin: 0;'>🚀 Data Analysis Assistant</h1>
+        <p style='color: #666; font-size: 1.1rem;'>Smart, fast and accurate for analyzing your data</p>
+    </div>
 """, unsafe_allow_html=True)
 
-# --- 4. تنظیمات سایدبار (با تفکیک بصری جذاب) ---
+# --- 4. تنظیمات سایدبار با ظاهر حرفه‌ای ---
 st.sidebar.title("🛠️ Control Panel")
 st.sidebar.divider()
 
@@ -36,12 +39,12 @@ groq_api_key = st.sidebar.text_input("Enter Groq API Key:",
                                      value="",
                                      type="password",
                                      placeholder="gsk_...")
-st.sidebar.divider()
 
+st.sidebar.divider()
 st.sidebar.subheader("📂 Input Data")
 data_file = st.sidebar.file_uploader("Choose a Sales Data", type="xlsx")
-st.sidebar.divider()
 
+st.sidebar.divider()
 st.sidebar.subheader("📝 Config The Titles Of Data")
 needs_rename = st.sidebar.checkbox("Do you Need to Change the Data Titles?")
 
@@ -54,6 +57,7 @@ if needs_rename:
         file_name="Config_Template.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     config_file = st.sidebar.file_uploader("Choose the Titles File", type="xlsx")
+
 st.sidebar.divider()
 
 # --- 5. منطق اصلی برنامه ---
@@ -64,12 +68,12 @@ if data_file:
         config_df = pd.read_excel(config_file).dropna()
         name_map = dict(zip(config_df.iloc[:, 0], config_df.iloc[:, 1]))
         df = df.rename(columns=name_map)
-        st.sidebar.success("Columns titles replaced successfully!")
+        st.sidebar.success("✅ Columns titles replaced!")
     elif needs_rename and not config_file:
         st.warning("Please choose a file to Rename the titles or unselect the checkbox.")
         st.stop()
 
-    # ایجاد تب‌ها
+    # ایجاد تب‌ها با استایل سفارشی
     tab_stats, tab_charts, tab_bot = st.tabs(["📊 Stats", "📈 Analytics", "🤖 AI Bot"])
 
     # --- TAB 1: STATS ---
@@ -79,63 +83,53 @@ if data_file:
         styled_desc = desc_df.style.format("{:,.0f}").set_properties(**{'text-align': 'right', 'padding': '10px'})
         st.dataframe(styled_desc, use_container_width=True)
 
-    # --- TAB 2: ANALYTICS (با فیلتر داینامیک) ---
+    # --- TAB 2: ANALYTICS ---
     with tab_charts:
         st.subheader("📈 Analytics Report Settings")
-
-        # بخش فیلتر داینامیک
-        with st.expander("🔍 Filter Data (Optional)"):
-            col_f1, col_f2 = st.columns(2)
-            filter_col = col_f1.selectbox("Filter by column:", ["None"] + df.columns.tolist())
-            if filter_col != "None":
-                unique_vals = df[filter_col].unique().tolist()
-                selected_vals = col_f2.multiselect(f"Select values for {filter_col}:", unique_vals, default=unique_vals)
-                filtered_df = df[df[filter_col].isin(selected_vals)]
-            else:
-                filtered_df = df
-
         chart_type = st.radio("Choose Chart Type:", ["Line Chart", "Bar Chart", "Pie Chart", "Treemap"],
                               horizontal=True)
 
-        with st.form("main_chart_form"):
-            columns = filtered_df.columns.tolist()
-            if chart_type == "Treemap":
-                c1, c2, c3 = st.columns(3)
-                parent_level = c1.selectbox("Parent Category:", columns)
-                child_level = c2.selectbox("Child Category:", columns)
-                y_axis = c3.selectbox("Values (Numeric):", columns)
-            else:
-                c1, c2 = st.columns(2)
-                x_axis = c1.selectbox("Select X axis:", columns)
-                y_axis = c2.selectbox("Select Y axis:", columns)
+        with st.expander("⚙️ Configure Chart Axes", expanded=True):
+            with st.form("main_chart_form"):
+                columns = df.columns.tolist()
+                if chart_type == "Treemap":
+                    c1, c2, c3 = st.columns(3)
+                    parent_level = c1.selectbox("Parent Category:", columns)
+                    child_level = c2.selectbox("Child Category:", columns)
+                    y_axis = c3.selectbox("Values (Numeric):", columns)
+                else:
+                    c1, c2 = st.columns(2)
+                    x_axis = c1.selectbox("Select X axis:", columns)
+                    y_axis = c2.selectbox("Select Y axis:", columns)
 
-            run_button = st.form_submit_button("🚀 Run Analysis")
+                run_button = st.form_submit_button("🚀 Run Analysis")
 
         if run_button:
+            st.divider()
             try:
                 if chart_type == "Treemap":
-                    chart_data = filtered_df.groupby([parent_level, child_level])[y_axis].sum().reset_index()
+                    chart_data = df.groupby([parent_level, child_level])[y_axis].sum().reset_index()
                     fig = px.treemap(chart_data, path=[parent_level, child_level], values=y_axis, color=y_axis,
                                      color_continuous_scale='RdBu')
                 else:
-                    chart_data = filtered_df.groupby(x_axis)[y_axis].sum().reset_index()
+                    chart_data = df.groupby(x_axis)[y_axis].sum().reset_index()
                     if chart_type == "Pie Chart":
-                        fig = px.pie(chart_data, names=x_axis, values=y_axis, hole=0.3)
+                        fig = px.pie(chart_data, names=x_axis, values=y_axis, hole=0.3, template="plotly_white")
                     elif chart_type == "Line Chart":
-                        fig = px.line(chart_data, x=x_axis, y=y_axis, markers=True)
+                        fig = px.line(chart_data, x=x_axis, y=y_axis, markers=True, template="plotly_white")
                     elif chart_type == "Bar Chart":
-                        fig = px.bar(chart_data, x=x_axis, y=y_axis, color=y_axis)
+                        fig = px.bar(chart_data, x=x_axis, y=y_axis, color=y_axis, template="plotly_white")
 
-                fig.update_layout(yaxis_tickformat=',.0f')
+                fig.update_layout(yaxis_tickformat=',.0f', margin=dict(t=10, b=10, l=10, r=10))
                 st.plotly_chart(fig, use_container_width=True)
-                st.success(f"Showing results for {len(filtered_df)} rows.")
             except Exception as e:
                 st.error(f"Error: {e}")
 
     # --- TAB 3: AI BOT ---
     with tab_bot:
         st.subheader("💬 Chat with your Data")
-        if st.button("🗑️ Clear Chat History"):
+        col1, col2 = st.columns([1, 4])
+        if col1.button("🗑️ Clear History"):
             st.session_state.messages = []
             st.rerun()
 
@@ -170,18 +164,25 @@ if data_file:
             except Exception as e:
                 st.error(f"AI/Connection Error: {e}")
 else:
-    st.info("Waiting for Sales Data to be uploaded from the sidebar...")
+    # صفحه خوش‌آمدگویی وقتی فایلی نیست
+    st.markdown("""
+        <div style='text-align: center; padding: 5rem; border: 2px dashed #ccc; border-radius: 20px; color: #888;'>
+            <img src='https://cdn-icons-png.flaticon.com/512/4090/4090458.png' width='100' style='opacity: 0.5; margin-bottom: 1rem;'>
+            <h3>Waiting for Sales Data to be uploaded from the sidebar...</h3>
+            <p>Please upload your Excel file from the left menu to begin the analysis.</p>
+        </div>
+    """, unsafe_allow_html=True)
 
-# --- 6. فوتر دائمی (زیباتر و کوچک‌تر) ---
-st.markdown("<br><br>", unsafe_allow_html=True)
+# --- 6. فوتر دائمی با آیکون‌های کوچک و حرفه‌ای ---
+st.markdown("<br><br><br>", unsafe_allow_html=True)
 st.divider()
 footer_html = f"""
 <div style="text-align: center;">
-    <p style="margin-bottom: 8px; font-size: 14px; color: #555;">Developed By <b>Hassan Moosavi</b></p>
-    <div style="display: flex; justify-content: center; gap: 10px;">
-        <a href="https://wa.me/31685529172" target="_blank"><img src="https://img.shields.io/badge/-WhatsApp-25D366?style=flat-square&logo=whatsapp&logoColor=white" height="20"></a>
-        <a href="http://linkedin.com/in/hassan-moosavi" target="_blank"><img src="https://img.shields.io/badge/-LinkedIn-0077B5?style=flat-square&logo=linkedin&logoColor=white" height="20"></a>
-        <a href="mailto:s.h.mousaviy@gmail.com"><img src="https://img.shields.io/badge/-Email-D14836?style=flat-square&logo=gmail&logoColor=white" height="20"></a>
+    <p style="margin-bottom: 10px; font-size: 0.9rem; color: #555;">Developed by <b>Hassan Moosavi</b></p>
+    <div style="display: flex; justify-content: center; gap: 15px;">
+        <a href="https://wa.me/31685529172" target="_blank"><img src="https://img.shields.io/badge/WhatsApp-25D366?style=flat-square&logo=whatsapp&logoColor=white" height="25"></a>
+        <a href="http://linkedin.com/in/hassan-moosavi" target="_blank"><img src="https://img.shields.io/badge/LinkedIn-0077B5?style=flat-square&logo=linkedin&logoColor=white" height="25"></a>
+        <a href="mailto:s.h.mousaviy@gmail.com"><img src="https://img.shields.io/badge/Email-D14836?style=flat-square&logo=gmail&logoColor=white" height="25"></a>
     </div>
 </div>
 """
