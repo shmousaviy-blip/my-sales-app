@@ -2,10 +2,12 @@ import pandas as pd
 import streamlit as st
 import io
 import plotly.express as px
+import numpy as np
+from sklearn.linear_model import LinearRegression
 from langchain_experimental.agents import create_pandas_dataframe_agent
 from langchain_groq import ChatGroq
 
-# --- 1. تنظیمات اولیه صفحه (باید اولین دستور باشد) ---
+# --- 1. تنظیمات اولیه صفحه ---
 st.set_page_config(page_title="Data Analysis Assistant", page_icon="📈", layout="wide")
 
 
@@ -30,15 +32,12 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-# --- 4. تنظیمات سایدبار با ظاهر حرفه‌ای ---
+# --- 4. تنظیمات سایدبار ---
 st.sidebar.title("🛠️ Control Panel")
 st.sidebar.divider()
 
 st.sidebar.subheader("🔑 AI Settings")
-groq_api_key = st.sidebar.text_input("Enter Groq API Key:",
-                                     value="",
-                                     type="password",
-                                     placeholder="gsk_...")
+groq_api_key = st.sidebar.text_input("Enter Groq API Key:", value="", type="password", placeholder="gsk_...")
 
 st.sidebar.divider()
 st.sidebar.subheader("📂 Input Data")
@@ -73,15 +72,69 @@ if data_file:
         st.warning("Please choose a file to Rename the titles or unselect the checkbox.")
         st.stop()
 
-    # ایجاد تب‌ها با استایل سفارشی
     tab_stats, tab_charts, tab_bot = st.tabs(["📊 Stats", "📈 Analytics", "🤖 AI Bot"])
 
-    # --- TAB 1: STATS ---
+    # --- TAB 1: STATS (بدون مقدار پیش‌فرض برای جلوگیری از خطا) ---
     with tab_stats:
         st.subheader("📊 Overview Of Data")
         desc_df = df.describe().T
         styled_desc = desc_df.style.format("{:,.0f}").set_properties(**{'text-align': 'right', 'padding': '10px'})
         st.dataframe(styled_desc, use_container_width=True)
+
+        st.divider()
+
+        st.subheader("🔮 Advanced Forecasting (Time vs Value)")
+
+        cols = df.columns.tolist()
+        numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+
+        # استفاده از Placeholder برای جلوگیری از انتخاب خودکار و ایجاد خطا
+        c_select1, c_select2 = st.columns(2)
+        time_col = c_select1.selectbox("📅 Select Time/Date Column:", ["-- Choose --"] + cols)
+        value_col = c_select2.selectbox("💰 Select Value Column to Predict:", ["-- Choose --"] + numeric_cols)
+
+        # فقط در صورتی که هر دو ستون انتخاب شده باشند، تحلیل شروع می‌شود
+        if time_col != "-- Choose --" and value_col != "-- Choose --":
+            try:
+                forecast_df = df[[time_col, value_col]].dropna().copy()
+                forecast_df = forecast_df.sort_values(by=time_col)
+
+                y = forecast_df[value_col].values.reshape(-1, 1)
+                X = np.arange(len(y)).reshape(-1, 1)
+
+                if len(y) > 2:
+                    future_steps = st.slider("Forecast periods into future:", 1, 30, 5)
+
+                    model = LinearRegression().fit(X, y)
+                    X_future = np.arange(len(y), len(y) + future_steps).reshape(-1, 1)
+                    y_pred = model.predict(X_future)
+
+                    st.write(f"**Predicted {value_col} for next {future_steps} periods:**")
+                    pred_results = pd.DataFrame({
+                        'Period': [f"Future +{i + 1}" for i in range(future_steps)],
+                        'Predicted Value': y_pred.flatten()
+                    })
+                    st.dataframe(pred_results.style.format({"Predicted Value": "{:,.2f}"}), use_container_width=True)
+
+                    # رسم نمودار
+                    history_df = pd.DataFrame(
+                        {'Time': forecast_df[time_col], 'Value': forecast_df[value_col], 'Type': 'Actual'})
+                    future_time = [f"Future {i + 1}" for i in range(future_steps)]
+                    future_df = pd.DataFrame({'Time': future_time, 'Value': y_pred.flatten(), 'Type': 'Forecast'})
+
+                    combined_df = pd.concat([history_df, future_df])
+                    fig_forecast = px.line(combined_df, x='Time', y='Value', color='Type',
+                                           title=f"Advanced Forecast: {value_col} over {time_col}",
+                                           markers=True,
+                                           color_discrete_map={'Actual': '#4A90E2', 'Forecast': '#2ECC71'})
+
+                    st.plotly_chart(fig_forecast, use_container_width=True)
+                else:
+                    st.info("ℹ️ Not enough valid data rows for forecasting.")
+            except Exception as e:
+                st.error(f"⚠️ Calculation Error: Please ensure the selected columns are compatible.")
+        else:
+            st.info("👋 Please select both Time and Value columns to see the forecast.")
 
     # --- TAB 2: ANALYTICS ---
     with tab_charts:
@@ -101,11 +154,9 @@ if data_file:
                     c1, c2 = st.columns(2)
                     x_axis = c1.selectbox("Select X axis:", columns)
                     y_axis = c2.selectbox("Select Y axis:", columns)
-
                 run_button = st.form_submit_button("🚀 Run Analysis")
 
         if run_button:
-            st.divider()
             try:
                 if chart_type == "Treemap":
                     chart_data = df.groupby([parent_level, child_level])[y_axis].sum().reset_index()
@@ -114,13 +165,13 @@ if data_file:
                 else:
                     chart_data = df.groupby(x_axis)[y_axis].sum().reset_index()
                     if chart_type == "Pie Chart":
-                        fig = px.pie(chart_data, names=x_axis, values=y_axis, hole=0.3, template="plotly_white")
+                        fig = px.pie(chart_data, names=x_axis, values=y_axis, hole=0.3)
                     elif chart_type == "Line Chart":
-                        fig = px.line(chart_data, x=x_axis, y=y_axis, markers=True, template="plotly_white")
+                        fig = px.line(chart_data, x=x_axis, y=y_axis, markers=True)
                     elif chart_type == "Bar Chart":
-                        fig = px.bar(chart_data, x=x_axis, y=y_axis, color=y_axis, template="plotly_white")
+                        fig = px.bar(chart_data, x=x_axis, y=y_axis, color=y_axis)
 
-                fig.update_layout(yaxis_tickformat=',.0f', margin=dict(t=10, b=10, l=10, r=10))
+                fig.update_layout(yaxis_tickformat=',.0f', template="plotly_white")
                 st.plotly_chart(fig, use_container_width=True)
             except Exception as e:
                 st.error(f"Error: {e}")
@@ -128,8 +179,7 @@ if data_file:
     # --- TAB 3: AI BOT ---
     with tab_bot:
         st.subheader("💬 Chat with your Data")
-        col1, col2 = st.columns([1, 4])
-        if col1.button("🗑️ Clear History"):
+        if st.button("🗑️ Clear History"):
             st.session_state.messages = []
             st.rerun()
 
@@ -140,31 +190,23 @@ if data_file:
                 llm = ChatGroq(temperature=0, model_name="llama-3.1-8b-instant", api_key=groq_api_key)
                 agent = create_pandas_dataframe_agent(llm, df, verbose=True, allow_dangerous_code=True,
                                                       handle_parsing_errors=True)
-
-                if "messages" not in st.session_state:
-                    st.session_state.messages = []
-
+                if "messages" not in st.session_state: st.session_state.messages = []
                 for msg in st.session_state.messages:
-                    with st.chat_message(msg["role"]):
-                        st.write(msg["content"])
-
+                    with st.chat_message(msg["role"]): st.write(msg["content"])
                 if prompt := st.chat_input("Ask about your data..."):
                     st.session_state.messages.append({"role": "user", "content": prompt})
-                    with st.chat_message("user"):
-                        st.write(prompt)
-
+                    with st.chat_message("user"): st.write(prompt)
                     with st.chat_message("assistant"):
                         with st.spinner("🤖 Analyzing..."):
-                            full_prompt = f"Data columns: {list(df.columns)}. Task: {prompt}. Answer in Persian."
+                            full_prompt = f"Data: {list(df.columns)}. Task: {prompt}. Answer in Persian."
                             response = agent.invoke({"input": full_prompt})
                             final_answer = response.get("output", str(response)) if isinstance(response,
                                                                                                dict) else response
                             st.write(final_answer)
                             st.session_state.messages.append({"role": "assistant", "content": final_answer})
             except Exception as e:
-                st.error(f"AI/Connection Error: {e}")
+                st.error(f"Error: {e}")
 else:
-    # صفحه خوش‌آمدگویی وقتی فایلی نیست
     st.markdown("""
         <div style='text-align: center; padding: 5rem; border: 2px dashed #ccc; border-radius: 20px; color: #888;'>
             <img src='https://cdn-icons-png.flaticon.com/512/4090/4090458.png' width='100' style='opacity: 0.5; margin-bottom: 1rem;'>
@@ -173,8 +215,7 @@ else:
         </div>
     """, unsafe_allow_html=True)
 
-# --- 6. فوتر دائمی با آیکون‌های کوچک و حرفه‌ای ---
-st.markdown("<br><br><br>", unsafe_allow_html=True)
+# --- 6. فوتر دائمی ---
 st.divider()
 footer_html = f"""
 <div style="text-align: center;">
