@@ -8,3 +8,4 @@ xlsxwriter
 altair<5
 scikit-learn
 numpy
+tabulate
