@@ -21,7 +21,6 @@ def create_template():
     return buffer
 
 
-# تابع کمکی برای دانلود اکسل
 def to_excel(df):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -47,14 +46,14 @@ st.sidebar.subheader("📂 Input Data")
 data_file = st.sidebar.file_uploader("Choose a Sales Data", type="xlsx")
 st.sidebar.divider()
 st.sidebar.subheader("📝 Config The Titles Of Data")
-needs_rename = st.sidebar.checkbox("Do you Need to Change the Data Titles?")
+needs_rename = st.sidebar.checkbox("Do you need to change the data titles?")
 
 config_file = None
 if needs_rename:
     template_file = create_template()
     st.sidebar.download_button(label="📥 Sample Package", data=template_file.getvalue(),
                                file_name="Config_Template.xlsx")
-    config_file = st.sidebar.file_uploader("Choose the Titles File", type="xlsx")
+    config_file = st.sidebar.file_uploader("Choose the titles file", type="xlsx")
 
 # تعریف Footer
 footer_html = f"""
@@ -85,7 +84,6 @@ if data_file:
 
     with tab_stats:
         st.subheader("📊 Overview Of Data")
-        # نمایش Describe با مدیریت خطای فرمت (برای تاریخ شمسی)
         st.dataframe(df.describe(include=[np.number]).T.style.format("{:,.0f}"), use_container_width=True)
 
         st.divider()
@@ -102,8 +100,6 @@ if data_file:
         if time_col != "-- Choose --" and value_col != "-- Choose --":
             try:
                 temp_df = df.dropna(subset=[time_col, value_col]).copy()
-
-                # منطق تجمیع ماهانه یا روزانه
                 if period_type == "Monthly":
                     temp_df['Grouping_Time'] = temp_df[time_col].astype(str).str[:7]
                 else:
@@ -128,15 +124,12 @@ if data_file:
                         'Period': [f"Future +{i + 1}" for i in range(future_steps)],
                         'Predicted Total': y_pred.flatten()
                     })
-                    # فرمت‌بندی فقط روی ستون عدد برای جلوگیری از خطای تاریخ شمسی
                     st.dataframe(pred_results.style.format(subset=['Predicted Total'], formatter="{:,.2f}"),
                                  use_container_width=True)
 
-                    # دکمه دانلود اکسل (جدید)
                     st.download_button(label="📥 Download Forecast Report", data=to_excel(pred_results),
                                        file_name="Forecast_Report.xlsx")
 
-                    # رسم نمودار تجمیعی
                     history_df = pd.DataFrame({'Time': agg_df['Grouping_Time'].astype(str), 'Value': agg_df[value_col],
                                                'Type': 'Actual Total'})
                     future_df = pd.DataFrame(
@@ -202,19 +195,22 @@ if data_file:
         else:
             try:
                 llm = ChatGroq(temperature=0, model_name="llama-3.1-8b-instant", api_key=groq_api_key)
-                # اضافه شدن قابلیت اجرای کد برای رسم نمودار در چت‌بات
-                agent = create_pandas_dataframe_agent(llm, df, verbose=True, allow_dangerous_code=True,
+                # allow_dangerous_code set to True for data processing speed, but UI chart logic removed.
+                agent = create_pandas_dataframe_agent(llm, df, verbose=False, allow_dangerous_code=True,
                                                       handle_parsing_errors=True)
+
                 if "messages" not in st.session_state: st.session_state.messages = []
                 for msg in st.session_state.messages:
                     with st.chat_message(msg["role"]): st.write(msg["content"])
-                if prompt := st.chat_input("Ask about your data or ask to draw a chart..."):
+
+                if prompt := st.chat_input("Ask about your data..."):
                     st.session_state.messages.append({"role": "user", "content": prompt})
                     with st.chat_message("user"): st.write(prompt)
+
                     with st.chat_message("assistant"):
-                        with st.spinner("🤖 Analyzing..."):
-                            response = agent.invoke(
-                                {"input": f"Answer in Persian. If asked for a chart, draw it. Task: {prompt}"})
+                        with st.spinner("🤖 Thinking..."):
+                            # Logic: No Persian responses, strictly English. No plotting instructions.
+                            response = agent.invoke({"input": f"Respond strictly in English. Question: {prompt}"})
                             final_answer = response.get("output", str(response)) if isinstance(response,
                                                                                                dict) else response
                             st.write(final_answer)
